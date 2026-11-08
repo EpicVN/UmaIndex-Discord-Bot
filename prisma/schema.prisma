@@ -1,0 +1,188 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"]
+}
+
+// -------------------------------------------------------------
+// 1. Artist & Translator
+// -------------------------------------------------------------
+enum CreatorRole {
+  ARTIST
+  TRANSLATOR
+  BOTH
+}
+
+model Creator {
+  id         String      @id @default(cuid())
+  handle     String      @unique
+  name       String
+  avatarUrl  String?
+  profileUrl String
+  role       CreatorRole @default(ARTIST)
+  isTarget   Boolean     @default(false)
+  filterTags String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  // Relations
+  originalPosts   OriginalPost[]   @relation("ArtistPosts")
+  translatedPosts TranslatedPost[] @relation("TranslatorPosts")
+
+  @@index([handle])
+  @@index([role])
+}
+
+// -------------------------------------------------------------
+// 2. Original Post
+// -------------------------------------------------------------
+model OriginalPost {
+  id         String   @id @default(cuid())
+  tweetId    String   @unique
+  tweetUrl   String
+  content    String?  @db.Text
+  postedAt   DateTime
+  mediaCount Int      @default(1)
+  mediaUrls  String[] @default([]) // Lưu link ảnh trực tiếp từ pbs.twimg.com
+
+  artistId String
+  artist   Creator @relation("ArtistPosts", fields: [artistId], references: [id], onDelete: Cascade)
+
+  // Series
+  seriesId String?
+  series   Series? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  translations TranslatedPost[]
+  tags         PostTag[]
+
+  @@index([artistId])
+  @@index([postedAt(sort: Desc)])
+  @@index([artistId, postedAt(sort: Desc)])
+  @@index([seriesId])
+}
+
+// -------------------------------------------------------------
+// 3. Translated Post
+// -------------------------------------------------------------
+model TranslatedPost {
+  id        String   @id @default(cuid())
+  tweetId   String   @unique
+  tweetUrl  String
+  language  String   @default("en")
+  content   String?  @db.Text
+  mediaUrls String[] @default([]) // Lưu link ảnh dịch trực tiếp từ pbs.twimg.com
+  postedAt  DateTime
+
+  translatorId String
+  translator   Creator @relation("TranslatorPosts", fields: [translatorId], references: [id], onDelete: Cascade)
+
+  originalPostId String
+  originalPost   OriginalPost @relation(fields: [originalPostId], references: [id], onDelete: Cascade)
+
+  isVerified Boolean @default(true)
+  viewCount  Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([translatorId])
+  @@index([originalPostId])
+  @@index([postedAt(sort: Desc)])
+  @@index([translatorId, postedAt(sort: Desc)])
+}
+
+// -------------------------------------------------------------
+// 4. Characters & Tags
+// -------------------------------------------------------------
+enum TagCategory {
+  CHARACTER
+  THEME
+  EVENT
+}
+
+model Tag {
+  id        String      @id @default(cuid())
+  slug      String      @unique
+  name      String      @unique
+  jpName    String?
+  category  TagCategory @default(CHARACTER)
+  colorCode String?
+
+  posts PostTag[]
+
+  createdAt DateTime @default(now())
+
+  @@index([slug])
+  @@index([category])
+  @@index([jpName])
+}
+
+// Quan hệ n-n giữa OriginalPost và Tag
+model PostTag {
+  postId   String
+  tagId    String
+  isManual Boolean @default(false)
+
+  post OriginalPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([postId])
+  @@index([tagId])
+}
+
+// -------------------------------------------------------------
+// 5. SERIES
+// -------------------------------------------------------------
+model Series {
+  id          String         @id @default(cuid())
+  title       String
+  slug        String         @unique
+  description String?        @db.Text
+  posts       OriginalPost[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([slug])
+}
+
+// -------------------------------------------------------------
+// 6. Discord report admin
+// -------------------------------------------------------------
+enum ReportType {
+  CHARACTER_TAG
+  ORIGINAL_LINK
+  BROKEN_MEDIA
+  OTHER
+  IRRELEVANT_CONTENT
+}
+
+enum ReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ComicReport {
+  id          String       @id @default(cuid())
+  postId      String
+  type        ReportType
+  content     String       // Nội dung đề xuất (link hoặc tên tag)
+  ipAddress   String
+  status      ReportStatus @default(PENDING)
+  handledBy   String?      // Tên Mod đã duyệt
+  createdAt   DateTime     @default(now())
+
+  @@index([ipAddress, createdAt])
+  @@index([status])
+}

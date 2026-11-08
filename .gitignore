@@ -1,0 +1,18 @@
+# Thư viện phụ thuộc (Render sẽ tự chạy npm install nên không cần đẩy lên)
+node_modules/
+
+# Biến môi trường (Tuyệt đối không đẩy file chứa Token và Password DB lên GitHub)
+.env
+
+# Các file build/log hệ thống
+dist/
+build/
+*.log
+.DS_Store
+
+# File tạm của IDE
+.vscode/
+.cursor/
+.devin/
+.claude/
+.agents/
